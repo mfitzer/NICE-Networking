@@ -1,10 +1,10 @@
 # Custom Networked Data - SyncVars
-Networking custom data can be done use the SyncVar attribute. The SyncVar attribute marks a variable to be shared across the network, so every time is changed by the authoritative network entity, that change is sent to the other connected network entities.
+Networking custom data can be done using the SyncVar attribute. The SyncVar attribute marks a variable to be shared across the network, so every time its value is changed by the authoritative network entity, that change is sent to the other connected network entities.
 
 ## Usage
 To use SyncVars, there are a couple requirements that must be met:
  - SyncVars will only work in scripts that inherit from NetworkBehaviour
- - In the Start method of the script, the NetworkBehaviour method, initialize must be called, passing the keyword `this` as a parameter
+ - In the Start method of the script, the NetworkBehaviour method, `initialize()` must be called, passing the keyword `this` as a parameter
 
 ### Supported SyncVar Data Types
 The type of a SyncVar **must be a field, not a property,** and it must meet one of the following requirements for it to work:
