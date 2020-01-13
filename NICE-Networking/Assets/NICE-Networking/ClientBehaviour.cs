@@ -515,12 +515,23 @@ namespace NICE_Networking
         /// <summary>
         /// Determines if delivery should be guaranteed. 
         /// </summary>
-        public bool guaranteeDelivery;
+        public bool guaranteeDelivery
+        {
+            get
+            {
+                return deliveryGuaranteed == 1 ? true : false;
+            }
+            set
+            {
+                deliveryGuaranteed = (byte)(value ? 1 : 0);
+            }
+        }
+        private byte deliveryGuaranteed;
 
         public QueuedMessage(byte[] msg, bool guaranteeDelivery = false)
         {
             this.msg = msg;
-            this.guaranteeDelivery = guaranteeDelivery;
+            deliveryGuaranteed = (byte)(guaranteeDelivery ? 1 : 0);
         }
     }
 }

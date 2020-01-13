@@ -9,9 +9,10 @@ To get started with NICE-Networking, follow the installation instructions below 
 ### Installation 
  - Clone this repository
  - Open the Unity project
- - Build your project on top of this project or select the `NICE-Networking/Assets/NICE-Networking` folder and export it as a package
+ - Build your project on top of this project or select the `NICE-Networking/Assets/NICE-Networking` folder and export it as a unity package
  - Import the package into a new Unity project using Unity 2019.1 or newer
  - Copy the `NICE-Networking/Packages/com.unity.transport` folder into the Packages folder of your new project
+ - Install the following packages from the Package Manager: Burst 1.1.2, Jobs 0.1.1, and Mathematics 1.1.0
  - Ensure the Scripting Runtime Version under `Edit > Project Settings > Player > Other Settings` is set to *Scripting Runtime Version 4.x Equivalent*
  - Check the box labeled *Allow 'unsafe' code* under `Edit > Project Settings > Player > Other Settings`. This allows the networking code to perform some manual memory management using the C# keyword, `unsafe`.
 

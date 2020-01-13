@@ -1,23 +1,45 @@
 ﻿using System.Collections.Generic;
+using System.Net;
 using UnityEngine;
+
 using Unity.Networking.Transport;
 using Unity.Collections;
+using Unity.Jobs;
 using UnityEngine.Assertions;
+
 using Unity.Networking.Transport.Utilities;
 using Unity.Collections.LowLevel.Unsafe;
 
 namespace NICE_Networking
 {
-    [RequireComponent(typeof(ClientManager))]
-    public class ServerBehaviour : MonoBehaviour
+    /// <summary>
+    /// Holds an assigned client ID and the associated NetworkConnection.
+    /// </summary>
+    internal struct ClientConnection
     {
-        private static ServerBehaviour instance;
-        public static ServerBehaviour Instance
+        public short clientID;
+        public NetworkConnection connection;
+
+        public ClientConnection(NetworkConnection connection, short clientID = -1)
+        {
+            if (clientID < 0)
+                this.clientID = JobifiedClientBehaviour.ID_NOT_SET;
+            else
+                this.clientID = clientID;
+
+            this.connection = connection;
+        }
+    }
+
+    public class JobifiedServerBehaviour : MonoBehaviour
+    {
+        private static JobifiedServerBehaviour instance;
+        public static JobifiedServerBehaviour Instance
         {
             get
             {
                 if (!instance)
-                    instance = FindObjectOfType<ServerBehaviour>();
+                    instance = FindObjectOfType<JobifiedServerBehaviour>();
                 return instance;
             }
         }
@@ -64,7 +86,12 @@ namespace NICE_Networking
         #endregion Server Events
 
         private UdpNetworkDriver networkDriver;
-        private NativeList<NetworkConnection> networkConnections; //Holds a list of active network connections
+        //private NativeList<NetworkConnection> networkConnections; //Holds a list of active network connections
+        private NativeList<ClientConnection> clientConnections; //Holds a list of client network connections
+        private NativeArray<byte> newClientsConnected; //Flag set from job to indicate if any new clients connected
+        private NativeList<short> disconnectedClients;
+        private JobHandle serverJobHandle;
+
         private NetworkPipeline unreliablePipeline; //Pipeline used for transporting packets without a guaranteed order of delivery
         private NetworkPipeline reliablePipeline; //Pipeline used for transporting packets in a reliable order
 
@@ -74,14 +101,15 @@ namespace NICE_Networking
         /// </summary>
         private const int MaxInflightReliablePackets = 32;
 
-        private Dictionary<short, NetworkConnection> connectedClients; //Associates NetworkConnections with assigned clientIDs
-        private Dictionary<short, Queue<QueuedMessage>> clientMessageQueues; //Holds messages waiting to be sent to specific clients
-        private Queue<QueuedMessage> messageQueue; //Holds messages waiting to be sent to the clients
+        private NativeHashMap<short, NetworkConnection> connectedClients; //Associates NetworkConnections with assigned clientIDs
+        //private NativeList<NetworkConnection> newConnections; //Holds list of new client connections
+        private NativeHashMap<short, NativeQueue<QueuedMessage>> clientMessageQueues; //Holds messages waiting to be sent to specific clients
+        private NativeQueue<QueuedMessage> messageQueue; //Holds messages waiting to be sent to the clients
 
         /// <summary>
         /// Total number of clients that have connected while the server is running.
         /// </summary>
-        private short totalClientsConnected = 0;
+        internal short totalClientsConnected = 0;
 
         /// <summary>
         /// Indicates if the server has any clients connected to it.
@@ -90,7 +118,8 @@ namespace NICE_Networking
         {
             get
             {
-                if (networkConnections.IsCreated) //networkConnections list has been instantiated
+                //networkConnections list has been instantiated
+                if (networkConnections.IsCreated)
                     return networkConnections.Length > 0;
 
                 return false;
@@ -168,60 +197,31 @@ namespace NICE_Networking
                 networkDriver.Listen(); //Start listening for incoming connections
 
             //Create list that can hold up to the specified number of client connections
-            networkConnections = new NativeList<NetworkConnection>(maxClients, Allocator.Persistent);
+            //networkConnections = new NativeList<NetworkConnection>(maxClients, Allocator.Persistent);
+
+            //Create list that can hold up to the specified number of client connections
+            clientConnections = new NativeList<ClientConnection>(maxClients, Allocator.Persistent);
+
+            newClientsConnected = new NativeArray<byte>(1, Allocator.Persistent);
+
+            disconnectedClients = new NativeList<short>(maxClients, Allocator.Persistent);
 
             //Creates a dictionary that tracks client connections with unique IDs
-            connectedClients = new Dictionary<short, NetworkConnection>();
-        }
-
-        /// <summary>
-        /// Updates network events for processing.
-        /// </summary>
-        private void updateNetworkEvents()
-        {
-            //Complete C# JobHandle to ensure network event updates can be processed
-            networkDriver.ScheduleUpdate().Complete();
-        }
-
-        /// <summary>
-        /// Clean up old, stale connections.
-        /// </summary>
-        private void cleanupConnections()
-        {
-            for (int i = 0; i < networkConnections.Length; i++)
-            {
-                if (!networkConnections[i].IsCreated) //Network connection is not created
-                {
-                    networkConnections.RemoveAtSwapBack(i);
-                    --i;
-                }
-            }
-        }
-
-        /// <summary>
-        /// Accepts new network connections.
-        /// </summary>
-        private void acceptNewConnections()
-        {
-            NetworkConnection newConnection;
-            while ((newConnection = networkDriver.Accept()) != default)
-            {
-                networkConnections.Add(newConnection); //Add new connection to active connections
-
-                Debug.Log("<color=magenta><b>[Server]</b></color> Accepted a connection.");
-
-                assignClientID(newConnection);
-            }
+            connectedClients = new NativeHashMap<short, NetworkConnection>();
         }
 
         /// <summary>
         /// Assigns a new NetworkConnection a unique clientID.
         /// </summary>
-        /// <param name="newConnection"></param>
-        private short assignClientID(NetworkConnection newConnection)
+        internal short assignClientID(NetworkConnection newConnection)
         {
             short clientID = totalClientsConnected++;
-            connectedClients.Add(clientID, newConnection);
+            //connectedClients.Add(clientID, newConnection);
+
+            foreach (ClientConnection client in clientConnections)
+            {
+                if (client.connection == newConnection)
+            }
 
             sendMessageToClient(MessageFactory.createClientIDMessage(clientID), clientID, true);
 
@@ -231,56 +231,36 @@ namespace NICE_Networking
         }
 
         /// <summary>
-        /// Process any new network events.
-        /// </summary>
-        private void processNetworkEvents()
-        {
-            DataStreamReader stream; //Used for reading data from data network events
-
-            if (hasConnections) //There are clients connected
-            {
-                List<short> clientIDs = new List<short>(connectedClients.Keys);
-                for (int i = 0; i < clientIDs.Count; i++)
-                {
-                    short clientID = clientIDs[i];
-                    NetworkConnection connection = connectedClients[clientID];
-
-                    if (!connection.IsCreated)
-                        Assert.IsTrue(true);
-
-                    //Get network events for the connection
-                    NetworkEvent.Type networkEvent;
-                    while ((networkEvent = networkDriver.PopEventForConnection(connection, out stream)) != NetworkEvent.Type.Empty)
-                    {
-                        if (networkEvent == NetworkEvent.Type.Data) //Connection sent data
-                        {
-                            MessageParser.parse(stream); //Parse data
-                        }
-                        else if (networkEvent == NetworkEvent.Type.Disconnect) //Connection disconnected
-                        {
-                            Debug.Log("<color=magenta><b>[Server]</b></color> Client " + clientID + " disconnected from server.");
-
-                            OnClientDisconnected?.Invoke(clientID); //Notify any observers of the disconnection event
-
-                            clientMessageQueues.Remove(clientID); //Remove any queued messages for the connection
-
-                            connection = default; //This ensures the connections will be cleaned up in cleanupConnections()
-                        }
-                    }
-                }
-            }
-        }
-
-        /// <summary>
         /// Disconnects all connected clients.
         /// </summary>
         private void disconnectClients()
         {
-            for (int i = 0; i < connectedClients.Count; i++)
+            for (int i = 0; i < clientConnections.Length; i++)
             {
-                networkDriver.Disconnect(networkConnections[i]);
+                networkDriver.Disconnect(clientConnections[i].connection);
             }
         }
+
+        /// <summary>
+        /// Processes any clients who have disconnected since the last frame
+        /// </summary>
+        private void checkForClientDisconnections()
+        {
+            int i = 0;
+            while (disconnectedClients.Length > 0)
+            {
+                short clientID = disconnectedClients[i];
+                Debug.Log("<color=magenta><b>[Server]</b></color> Client " + clientID + " disconnected from server.");
+
+                OnClientDisconnected?.Invoke(clientID); //Notify any observers of the disconnection event
+
+                clientMessageQueues.Remove(clientID); //Remove any queued messages for the connection
+
+                disconnectedClients.RemoveAtSwapBack(i);
+            }
+        }
+
+        #endregion General Network Operations
 
         #region Event Handling
 
@@ -294,7 +274,7 @@ namespace NICE_Networking
         {
             if (connectedClients.ContainsKey(clientsideID)) //Client ID is already associated with a connection
             {
-                if (connectedClients.ContainsKey(serversideID)) //Serverside ID is associated with the active client connection
+                if (clientConnections.ContainsKey(serversideID)) //Serverside ID is associated with the active client connection
                 {
                     //Associate active connection with the original clientID
                     connectedClients[clientsideID] = connectedClients[serversideID];
@@ -305,7 +285,7 @@ namespace NICE_Networking
                         initializeClientMessageQueue(clientsideID);
 
                         //Get messages queued to new client ID
-                        Queue<QueuedMessage> queuedMsgs = clientMessageQueues[serversideID];
+                        NativeQueue<QueuedMessage> queuedMsgs = clientMessageQueues[serversideID];
 
                         //Transfer queued messages to the original client ID's message queue
                         while (queuedMsgs.Count > 0)
@@ -329,7 +309,7 @@ namespace NICE_Networking
 
         #region Memory Management
 
-        private void OnDestroy()
+        public void OnDestroy()
         {
             disconnectClients();
             disposeUnmanagedMemory();
@@ -337,16 +317,32 @@ namespace NICE_Networking
 
         private void disposeUnmanagedMemory()
         {
+            // Make sure we run our jobs to completion before exiting.
+            serverJobHandle.Complete();
+
             if (networkDriver.IsCreated)
                 networkDriver.Dispose();
 
-            if (networkConnections.IsCreated)
-                networkConnections.Dispose();
+            if (clientConnections.IsCreated)
+                clientConnections.Dispose();
+
+            if (newClientsConnected.IsCreated)
+                newClientsConnected.Dispose();
+
+            if (disconnectedClients.IsCreated)
+                disconnectedClients.Dispose();
+
+            if (messageQueue.IsCreated)
+                messageQueue.Dispose();
+
+            foreach (KeyValuePair<short, NativeQueue<QueuedMessage>> msgQueue in clientMessageQueues)
+            {
+                if (msgQueue.Value.IsCreated)
+                    msgQueue.Value.Dispose();
+            }
         }
 
         #endregion Memory Management
-
-        #endregion General Network Operations
 
         #region Message Sending
 
@@ -355,11 +351,11 @@ namespace NICE_Networking
         /// </summary>
         private void initializeMessageQueues()
         {
-            if (clientMessageQueues == null)
-                clientMessageQueues = new Dictionary<short, Queue<QueuedMessage>>();
+            if (clientMessageQueues.IsCreated)
+                clientMessageQueues = new NativeHashMap<short, NativeQueue<QueuedMessage>>();
 
-            if (messageQueue == null)
-                messageQueue = new Queue<QueuedMessage>();
+            if (!messageQueue.IsCreated)
+                messageQueue = new NativeQueue<QueuedMessage>(Allocator.Persistent);
         }
 
         /// <summary>
@@ -368,8 +364,8 @@ namespace NICE_Networking
         private void initializeClientMessageQueue(short clientID)
         {
             //Create message queue for client if not already created
-            if (!clientMessageQueues.ContainsKey(clientID))
-                clientMessageQueues.Add(clientID, new Queue<QueuedMessage>());
+            if (!clientMessageQueues.TryGetValue(clientID, out NativeQueue<QueuedMessage> msgQueue))
+                clientMessageQueues.TryAdd(clientID, new NativeQueue<QueuedMessage>(Allocator.Persistent));
         }
 
         /// <summary>
@@ -484,7 +480,7 @@ namespace NICE_Networking
             #region Messages to Individual Clients
 
             //Send any client specific queued messages (messages only going to one client)
-            foreach (KeyValuePair<short, Queue<QueuedMessage>> client in clientMessageQueues)
+            foreach (KeyValuePair<short, NativeQueue<QueuedMessage>> client in clientMessageQueues)
             {
                 short clientID = client.Key;
 
@@ -590,17 +586,119 @@ namespace NICE_Networking
 
         #endregion Message Sending
 
-        private void LateUpdate()
+        private void Update()
         {
-            updateNetworkEvents();
+            serverJobHandle.Complete();
 
-            cleanupConnections();
+            checkForClientDisconnections();
 
-            acceptNewConnections();
+            newClientsConnected[0] = 0; //Reset new client counter
+            var connectionJob = new ServerUpdateConnectionsJob
+            {
+                driver = networkDriver,
+                connections = clientConnections,
+                disconnectedClients = disconnectedClients,
+                newClientsConnected = newClientsConnected
+            };
 
-            processNetworkEvents();
+            var clientIDAssignmentJob = new ServerClientIDAssignmentJob
+            {
+                clientConnections = clientConnections.AsDeferredJobArray(),
+                clientIDBase = totalClientsConnected
+            };
 
-            sendQueuedMessages();
+            var serverUpdateJob = new ServerUpdateJob
+            {
+                networkDriver = networkDriver.ToConcurrent(), //Concurrent allows it to be called from multiple threads
+                connections = clientConnections.AsDeferredJobArray() //AsDeferredJobArray() creates a NativeArray once the job is executed
+            };
+
+            serverJobHandle = networkDriver.ScheduleUpdate();
+            serverJobHandle = connectionJob.Schedule(serverJobHandle);
+            
+            serverJobHandle = serverUpdateJob.Schedule(clientConnections.Length, 1, serverJobHandle);
+        }
+    }
+
+    internal struct ServerUpdateConnectionsJob : IJob
+    {
+        public UdpNetworkDriver driver;
+        public NativeList<ClientConnection> connections;
+        public NativeList<short> disconnectedClients;
+        public NativeArray<byte> newClientsConnected; //Indicates if any new clients connected
+
+        public void Execute()
+        {
+            // Clean up connections
+            for (int i = 0; i < connections.Length; i++)
+            {
+                if (!connections[i].connection.IsCreated)
+                {
+                    disconnectedClients.Add(connections[i].clientID);
+                    connections.RemoveAtSwapBack(i);
+                    --i;
+                }
+            }
+
+            // Accept new connections
+            NetworkConnection c;
+            while ((c = driver.Accept()) != default)
+            {
+                connections.Add(new ClientConnection(c)); //Add new connection to active connections
+                newClientsConnected[0] += 1; //Indicate there are new client(s) connected
+                Debug.Log("<color=magenta><b>[Server]</b></color> Accepted a connection.");
+            }
+        }
+    }
+
+    internal struct ServerUpdateJob : IJobParallelFor
+    {
+        public UdpNetworkDriver.Concurrent networkDriver;
+        public NativeArray<ClientConnection> connections;
+
+        public void Execute(int index)
+        {
+            DataStreamReader stream; //Used for reading data from data network events
+            if (!connections[index].connection.IsCreated)
+                Assert.IsTrue(true);
+
+            //Get network events for the connection
+            NetworkEvent.Type networkEvent;
+            while ((networkEvent = networkDriver.PopEventForConnection(connections[index].connection, out stream)) != NetworkEvent.Type.Empty)
+            {
+                if (networkEvent == NetworkEvent.Type.Data) //Connection sent data
+                {
+                    MessageParser.parse(stream); //Parse data (THIS MAY NOT BE ACCEPTABLE IN A JOB)!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                }
+                else if (networkEvent == NetworkEvent.Type.Disconnect) //Connection disconnected
+                {
+                    //This ensures the connection will be cleaned up
+                    connections[index] = default;
+
+                    Debug.Log("<color=magenta><b>[Server]</b></color> Client " + connections[index].clientID + " disconnected from server.");
+                }
+            }
+        }
+    }
+
+    internal struct ServerClientIDAssignmentJob : IJobParallelForFilter
+    {
+        public NativeArray<ClientConnection> clientConnections;
+        public short clientIDBase; //Base value used for computing new clientIDs
+
+        public bool Execute(int i)
+        {
+            //New client, still needs client ID
+            if (clientConnections[i].clientID == JobifiedClientBehaviour.ID_NOT_SET)
+            {
+                ClientConnection newClient = clientConnections[i];
+                short newClientID = (short)(clientIDBase + i);
+                clientConnections[i] = new ClientConnection(newClient.connection, newClientID);
+                return true;
+            }
+
+            //Already has client ID, not a new client
+            return false;
         }
     }
 }
