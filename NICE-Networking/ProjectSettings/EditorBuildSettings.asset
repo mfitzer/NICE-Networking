@@ -20,7 +20,13 @@ EditorBuildSettings:
   - enabled: 0
     path: Assets/NICE-Networking/Samples/Avatars/Client - NoPlayerAvatar.unity
     guid: 713be6f90a2093147b5dd3060d889882
-  - enabled: 1
+  - enabled: 0
     path: Assets/NICE-Networking/Samples/SyncVars/Client - SyncVars.unity
     guid: e8470698087a4aa4d93d0988d4968a86
+  - enabled: 1
+    path: Assets/NICE-Networking/Samples/NetworkEvents/Client - NetworkEvents.unity
+    guid: 9d6145422001e04468c15b43fe40a93e
+  - enabled: 0
+    path: Assets/NICE-Networking/Samples/NetworkEvents/Server - NetworkEvents.unity
+    guid: f73fdb9894ea7ff46b0a4ae4e6eb17b3
   m_configObjects: {}
