@@ -575,5 +575,17 @@ namespace NICE_Networking
 
             return msgBytes.ToArray();
         }
+
+        public static byte[] createNetworkEventMessage(NetworkIdentity networkIdentity, bool clientMessage = false)
+        {
+            List<byte> msgBytes = new List<byte>();
+
+            byte msgHeader = (byte)(clientMessage ? 33 : 34); //Change message header to indicate if it's a client message or not
+            msgBytes.Add(msgHeader); //Message Header
+
+            msgBytes.AddRange(networkIdentity.networkID.serialize()); //Identity of the network behaviour object on the network
+
+            return msgBytes.ToArray();
+        }
     }
 }

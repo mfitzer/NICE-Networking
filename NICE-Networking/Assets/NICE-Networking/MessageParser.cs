@@ -130,6 +130,12 @@ namespace NICE_Networking
                 case 32:
                     processAvatarRequestMessage(msg, true);
                     break;
+                case 33:
+                    processNetworkEventMessage(msg, true);
+                    break;
+                case 34:
+                    processNetworkEventMessage(msg, false);
+                    break;
                 default:
                     processCustomMessage(msgHeader, msg);
                     break;
@@ -722,6 +728,24 @@ namespace NICE_Networking
             {
                 byte[] clientIDMsg = MessageFactory.createAvatarRequestMessage(false, clientID);
                 ServerBehaviour.Instance.sendMessage(clientIDMsg, clientID, true); //Forward to all clients but the sender
+            }
+        }
+
+        private static void processNetworkEventMessage(byte[] msg, bool clientMessage)
+        {
+            short netID = ObjectSerializer.deserializeShort(ref msg);
+
+            if (NetworkEntityManager.Instance.findComponent(netID, out NetworkedEvent networkedEvent))
+            {
+                networkedEvent.OnEventInvoked.Invoke();
+
+                //Message was sent from a client, now being processed on the server
+                if (clientMessage && ServerBehaviour.Instance)
+                {
+                    short clientID = ObjectSerializer.deserializeShort(ref msg); //Client who sent the message
+                    byte[] networkEventMsg = MessageFactory.createNetworkEventMessage(networkedEvent.networkIdentity);
+                    ServerBehaviour.Instance.sendMessage(networkEventMsg, clientID, true); //Forward to all clients but the sender
+                }
             }
         }
     }
