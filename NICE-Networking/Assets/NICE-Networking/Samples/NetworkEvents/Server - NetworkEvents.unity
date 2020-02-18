@@ -242,6 +242,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   networkEvent: {fileID: 1141902115}
   invokeEvent: 0
+  eventHandlerDisplay: {fileID: 0}
 --- !u!4 &854949704
 Transform:
   m_ObjectHideFlags: 0

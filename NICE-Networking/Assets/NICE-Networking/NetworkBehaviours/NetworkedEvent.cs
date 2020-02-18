@@ -16,8 +16,10 @@ namespace NICE_Networking
         /// Invokes the event over the network.
         /// </summary>
         public void invoke()
-        {            
-            networkIdentity.sendMessage(MessageFactory.createNetworkEventMessage(networkIdentity, !NetworkIdentity.isServer));
+        {
+            if (hasNetworkAuthority)
+                networkIdentity.sendMessage(MessageFactory.createNetworkEventMessage(networkIdentity, !NetworkIdentity.isServer));
+
             OnEventInvoked.Invoke();
         }
     }
