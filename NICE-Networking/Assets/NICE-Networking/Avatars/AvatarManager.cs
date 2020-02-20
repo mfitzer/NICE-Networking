@@ -100,6 +100,10 @@ namespace NICE_Networking
         /// <param name="clientID">ID of the client who requested the avatar.</param>
         internal void handleAvatarRequest(short clientID)
         {
+            //Avatar request is for this client, ignore it
+            if (NetworkIdentity.isClient && clientID == ClientBehaviour.Instance.ClientID)
+                return;
+
             if (!clientAvatarMappings.ContainsKey(clientID)) //Make sure the client doesn't already have an avatar
             {
                 clientAvatarRequests.Add(clientID); //Record client's request for an avatar
