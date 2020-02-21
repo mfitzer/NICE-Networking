@@ -97,6 +97,8 @@ namespace NICE_Networking
         /// </summary>
         public void handleClientReconnected(short clientID)
         {
+            connectedClients.Add(clientID); //Add client back to list of connected clients
+
             if (NetworkIdentity.isServer)
                 ServerBehaviour.Instance.sendMessage(MessageFactory.createClientReconnectionEventMessage(clientID), clientID, true);
 
