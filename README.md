@@ -1,6 +1,6 @@
 This project is a networking library built on top of Unity's new real time multiplayer [Real-time Multiplayer](https://github.com/Unity-Technologies/multiplayer) solution. Specifically, this project is built on top of the [Workflow: Creating a minimal client and server](https://github.com/Unity-Technologies/multiplayer/blob/master/com.unity.transport/Documentation~/workflow-client-server.md) sample from Unity. It aims to make it easy to incorporate local multiplayer functionality into projects by replicating some features from Unity's old networking solution such as NetworkTransforms and SyncVars.
 
-**Note:** The NICE Networking library is currently being developed in conjunction with the virtual reality project, [MN NICE](https://www.facebook.com/watch/?v=742787122902502).
+**Note:** The development of the NICE Networking library is currently halted due to the virtual reality project, [MN NICE](https://www.facebook.com/watch/?v=742787122902502), being halted as well. There will be no more development on this at this time.
 
 ## Getting Started
 To get started with NICE-Networking, follow the installation instructions below and then view the documentation to see what NICE-Networking has to offer.
