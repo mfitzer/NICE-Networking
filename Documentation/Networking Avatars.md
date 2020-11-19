@@ -5,7 +5,7 @@ Player avatars are not required with NICE Networking, however, they are supporte
 On the client, a player avatar prefab must be provided if that client is going to have a networked player avatar. A client avatar prefab must also be provided to represent other connected clients. Make sure the NetworkAuthority on the client avatar prefab is set to *Server* because that avatar is controlled by another client, through the server. The client avatar prefab should not have any player control scripts on it because it is controlled by the other clients.
 
 ## Server Setup
-On the server, the a different client avatar prefab should be provided to the AvatarManager, with its NetworkAuthority set to *Client*.
+On the server, a different client avatar prefab should be provided to the AvatarManager, with its NetworkAuthority set to *Client*.
 
 ## Mixed Avatar Setup
 There are some use cases which require only some clients to have avatars, so a client will only have an avatar on the network if a player avatar prefab is provided to the AvatarManager. However, that client will still see client avatars for other connected clients who have avatars as long as it has the AvatarManager component.
